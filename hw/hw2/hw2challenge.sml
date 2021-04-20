@@ -128,8 +128,19 @@ fun lexical_error msg = raise Fail ("Lexical error: " ^ msg)
          returning the string of characters in between, and the remainder.
 *)
 fun consume_string_literal (cs : char list) : string * char list =
-  (* TODO, about 11 lines *) raise Fail "consume_string_literal unimplemented"
-
+    let fun helper (s, re) =
+	    case re of
+		[] => lexical_error "no closing double quote"
+	      | c::re' => if c = #"\""
+			  then (s, re')
+			  else helper (s ^ (String.implode [c]), re')
+    in
+	case cs of
+	    [] => lexical_error "no string literal at the beginning"
+	  | c::cs' => if c = #"\""
+		      then helper ("", cs')
+		      else lexical_error "no string literal at the beginning"
+    end
 
 (* Challenge Problem C2: Write a consumer for the keywords true, false, and null.
 
@@ -159,8 +170,18 @@ fun consume_string_literal (cs : char list) : string * char list =
    Either of the above strategies will receive full credit.
 *)
 fun consume_keyword (cs : char list) : token * char list =
-  (* TODO, about 15 lines to do it the "clean" way, or about 5 lines to do it the "ugly" way. *)
-  raise Fail "consume_keyword unimplemented"
+    let val lookup = [("true", TrueTok), ("false", FalseTok), ("null", NullTok)]
+	fun helper (s, re) =
+	    case re of
+		[] => ((assoc (s, lookup)), re)
+	      | c::re' => if Char.isAlpha c
+			  then helper (s ^ (String.implode [c]), re')
+			  else ((assoc (s, lookup)), re)
+    in
+	case helper ("", cs) of
+	    (SOME v, cs') => (v, cs')
+	  | _ => lexical_error "lookup table does not contain the string"
+    end
 
 
 (* Here's a provided consumer for numbers, since it's a bit complex.
@@ -284,8 +305,15 @@ fun tokenize_char_list (cs : char list) : token list =
   case cs of
      [] => []
    | #"\n" :: cs => tokenize_char_list cs (* ignore newlines *)
+   | #"\r" :: cs => tokenize_char_list cs (* ignore win newlines *)
+   | #" " :: cs => tokenize_char_list cs (* ignore whitespace *)
    | #"{" :: cs => LBrace :: tokenize_char_list cs
    (* TODO, about 7 lines: several more cases here. *)
+   | #"}" :: cs => RBrace :: tokenize_char_list cs
+   | #"[" :: cs => LBracket :: tokenize_char_list cs
+   | #"]" :: cs => RBracket :: tokenize_char_list cs
+   | #"," :: cs => Comma :: tokenize_char_list cs
+   | #":" :: cs => Colon :: tokenize_char_list cs
    | c :: cs =>
      if Char.isDigit c orelse c = #"-" orelse c = #"~"
      then
@@ -295,6 +323,20 @@ fun tokenize_char_list (cs : char list) : token list =
              NumLit s :: tokenize_char_list cs
          end
              (* TODO, about 15 lines: check for string literals and keywords here *)
+     else if c = #"\""
+     then
+	 let
+	     val (s, cs) = consume_string_literal (c :: cs)
+	 in
+	     StringLit s :: tokenize_char_list cs
+	 end
+     else if c = #"f" orelse c = #"t" orelse c = #"n"
+     then
+	 let
+	     val (t, cs) = consume_keyword (c :: cs)
+	 in
+	     t :: tokenize_char_list cs
+	 end
      else lexical_error ("Unknown character " ^ Char.toString c)
 
 
@@ -303,7 +345,7 @@ fun tokenize_char_list (cs : char list) : token list =
 
    Hint: use String.explode and tokenize_char_list *)
 fun tokenize (s : string) : token list =
-  (* TODO, 1 line *) raise Fail "tokenize unimplemented"
+    tokenize_char_list (String.explode s)
 
 (* The tokenizer produces a list of tokens, which we now need to
    actually parse into a json value. We will structure our parser in a
@@ -343,7 +385,9 @@ fun syntax_error (ts : token list, msg : string) =
    call `syntax_error` with the token list and an appropriate message.
 *)
 fun parse_string (ts : token list) : string * token list =
-  (* TODO, about 3 lines *) raise Fail "parse_string unimplemented"
+    case ts of
+	StringLit s :: ts' => (s, ts')
+      | _ => syntax_error (ts, "Not a string")
 
 
 (* It is often useful to consume a single token from the token list
@@ -356,8 +400,9 @@ fun parse_string (ts : token list) : string * token list =
    If the token is not there as expected, call syntax_error with an
    appropriate message. *)
 fun expect (t : token, ts : token list) : token list =
-  (* TODO, about 6 lines *) raise Fail "expect unimplemented"
-
+    case ts of
+	t::ts' => ts'
+      | _ => syntax_error (ts, "Token is not expected")
 
 (* We're now ready to start writing a `parse_json` function, which
    will contain several local helper functions. In this case, it is
@@ -387,9 +432,14 @@ fun parse_json (ts : token list) : json * token list =
 
        Hint: use `parse_string` for the field name, `expect` for the
              colon, and a recursive call to `parse_json` for the value. *)
-    fun parse_field_value (ts : token list) : (string * json) * token list =
-      (* TODO, about 7 lines *) raise Fail "parse_field_value unimplemented"
-
+      fun parse_field_value (ts : token list) : (string * json) * token list =
+	  let
+	      val (s, ts) = parse_string ts
+	      val ts = expect (Colon, ts)
+	      val (j, ts) = parse_json (ts)
+	  in
+	      ((s, j), ts)
+	  end
 
     (* Challenge Problem C8: write a function `parse_field_value_list` that
        parses a possibly empty comma-separated list of field-value
@@ -408,8 +458,21 @@ fun parse_json (ts : token list) : json * token list =
              immediately return a singleton list.
      *)
     fun parse_field_value_list (ts : token list) : (string * json) list * token list =
-      (* TODO, about 15 lines *) raise Fail "parse_field_value_list unimplemented"
-
+	case ts of
+	    RBrace::ts' => ([], ts')
+	  | _ =>
+	    let
+		val (x, ts) = parse_field_value ts
+	    in
+		case ts of
+		    Comma::ts' =>
+		    let val (xs, ts) = parse_field_value_list ts'
+		    in
+			(x::xs, ts)
+		    end
+		  | RBrace::ts' => ([x], ts')
+		  | _ => syntax_error (ts, "Field value list syntax error")
+	    end
 
     (* Challenge Problem C9: Write a function `parse_array_element_list` that
        parses a possibly empty comma-separated list of json values,
@@ -421,8 +484,21 @@ fun parse_json (ts : token list) : json * token list =
              curly braces.
      *)
     fun parse_array_element_list (ts : token list) : json list * token list =
-      (* TODO, about 15 lines *) raise Fail "parse_array_element_list unimplemented"
-
+	case ts of
+	    RBracket::ts' => ([], ts')
+	  | _ =>
+	    let
+		val (j, ts) = parse_json ts
+	    in
+		case ts of
+		    Comma::ts' =>
+		    let val (js, ts) = parse_array_element_list ts'
+		    in
+			(j::js, ts)
+		    end
+		  | RBracket::ts' => ([j], ts')
+		  | _ => syntax_error (ts, "Array element list syntax error")
+	    end
   in
     (* Challenge Problem C10: complete the definition of `parse_json` by adding
        branches to the pattern match below.
@@ -441,9 +517,23 @@ fun parse_json (ts : token list) : json * token list =
          (Num r, ts)
        end
      (* TODO, about 18 lines: more cases here *)
-
+     | StringLit s :: ts => (String s, ts)
+     | FalseTok :: ts => (False, ts)
+     | TrueTok :: ts => (True, ts)
+     | NullTok :: ts => (Null, ts)
+     | LBrace :: ts =>
+       let
+	   val (xs, ts) = parse_field_value_list ts
+       in
+	   (Object xs, ts)
+       end
+     | LBracket :: ts =>
+       let
+	   val (js, ts) = parse_array_element_list ts
+       in
+	   (Array js, ts)
+       end
      | _ => syntax_error (ts, "expecting json")
-
   end
 
 (* Here is a freebie function to parse a .json file. Give it a
@@ -464,12 +554,10 @@ Control.Print.printDepth := 3;
 Control.Print.printLength := 3;
 
 (* Uncomment once parser is implemented *)
-(*
 val small_example  = parse_from_file "small_police.json"
 val medium_example = parse_from_file "medium_police.json"
 val large_example  = parse_from_file "large_police.json"
 val all_data       = parse_from_file "complete_police.json"
-*)
 ;
 
 (* Now make SML print more so that we can see what we're working with. *)

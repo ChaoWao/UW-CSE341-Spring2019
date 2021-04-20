@@ -1,6 +1,7 @@
 (* CSE 341, Homework 2 Tests *)
 
-use "hw2.sml";
+(* use "hw2.sml"; *)
+use "hw2challenge.sml";
 
 (* You will surely want to add more! *)
 
@@ -88,34 +89,39 @@ val test19 = json_to_string json_obj =
    challenge problems follow.  The tests below are in a different style 
    where we use pattern-matching in val-bindings for the expected output. *)
 
-(*
 (* Tests for consume_string_literal *)
-val ("foo",[#" ",#":",#" ",#"t",#"r",#"u",#"e"]) =
+val testc1 = ("foo",[#" ",#":",#" ",#"t",#"r",#"u",#"e"]) =
   consume_string_literal (String.explode "\"foo\" : true")
 
 (* Tests for consume_keyword *)
-val (FalseTok, [#" ",#"f",#"o",#"o"]) =
+val testc2 = (FalseTok, [#" ",#"f",#"o",#"o"]) =
   consume_keyword (String.explode "false foo")
 
 (* Tests consume_number *)
-val ("1",[]) = consume_num (String.explode "1")
-val ("~1.23e17",[]) = consume_num (String.explode "~1.23e17")
+val test_cn1 = ("1",[]) = consume_num (String.explode "1")
+val test_cn2 = ("~1.23e17",[]) = consume_num (String.explode "~1.23e17")
 
 (* Tests for tokenize_char_list. You'll want more. *)
-val [LBrace, StringLit "foo", Colon, NumLit "3.14", Comma,
+val testc3 = [LBrace, StringLit "foo", Colon, NumLit "3.14", Comma,
      StringLit "bar", Colon, LBracket, TrueTok, Comma,
      FalseTok, RBracket, RBrace] =
   tokenize_char_list (String.explode "{ \"foo\" : 3.14, \"bar\" : [true, false] }")
 
+val testc4 = [LBrace, StringLit "foo", Colon, NumLit "3.14", Comma,
+     StringLit "bar", Colon, LBracket, TrueTok, Comma,
+     FalseTok, RBracket, RBrace] =
+  tokenize "{ \"foo\" : 3.14, \"bar\" : [true, false] }"
+
 (* Tests for parse_string *)
-val ("foo", [FalseTok]) =
+val testc5 = ("foo", [FalseTok]) =
   parse_string ([StringLit "foo", FalseTok])
 
 (* Tests for expect *)
-val [FalseTok] = expect (Colon, [Colon, FalseTok])
+val testc6 = [FalseTok] = expect (Colon, [Colon, FalseTok])
 
 (* Tests for parse_json. You'll probably want way more. *)
-val (Object [("foo", Null),("bar",Array [True,False])],[]) =
-  parse_json (tokenize "{ \"foo\" : null, \"bar\" : [true, false] }")
-*)
+val testc7_10 =
+    case parse_json (tokenize "{ \"foo\" : null, \"bar\" : [true, false] }") of
+        (Object [("foo", Null),("bar",Array [True,False])],[]) => true
+      | _ => false  
 
