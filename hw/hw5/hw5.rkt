@@ -24,6 +24,15 @@
 ;; Problem 1
 
 ;; CHANGE (put your solutions here)
+(define (racketlist->mupllist xs)
+  (cond [(null? xs) (munit)]
+        [(pair? xs) (apair (car xs) (racketlist->mupllist (cdr xs)))]
+        [#t (error "expect a list")]))
+
+(define (mupllist->racketlist xs)
+  (cond [(munit? xs) null]
+        [(apair? xs) (cons (apair-e1 xs) (mupllist->racketlist (apair-e2 xs)))]
+        [#t (begin (display xs) (error "expect a MUPL list"))]))
 
 ;; Problem 2
 
@@ -50,6 +59,55 @@
                        (int-num v2)))
                (error "MUPL addition applied to non-number")))]
         ;; CHANGE add more cases here
+        [(int? e) e]
+        [(isgreater? e)
+         (let ([v1 (eval-under-env (isgreater-e1 e) env)]
+               [v2 (eval-under-env (isgreater-e2 e) env)])
+           (if (and (int? v1)
+                    (int? v2))
+               (if (> (int-num v1) (int-num v2)) (int 1) (int 0))
+               (error "MUPL isgreater applied to non-number")))]
+        [(ifnz? e)
+         (let ([v (eval-under-env (ifnz-e1 e) env)])
+           (if (int? v)
+               (if (not (= (int-num v) 0)) (eval-under-env (ifnz-e2 e) env) (eval-under-env (ifnz-e3 e) env))
+               (error "MUPL ifnz applied to non-number")))]
+        [(fun? e) (closure env e)]
+        [(mlet? e)
+         (let ([v (eval-under-env (mlet-e e) env)])
+           (eval-under-env (mlet-body e) (cons (cons (mlet-var e) v) env)))]
+        [(call? e)
+         (let ([v1 (eval-under-env (call-funexp e) env)]
+               [v2 (eval-under-env (call-actual e) env)])
+           (if (closure? v1)
+               (let* ([c-env (closure-env v1)]
+                      [c-fun (closure-fun v1)]
+                      [f-name (fun-nameopt c-fun)]
+                      [arg-name (fun-formal c-fun)]
+                      [f-body (fun-body c-fun)]
+                      [n-env (cons (cons arg-name v2) c-env)]
+                      [new-env (if (null? f-name) n-env (cons (cons f-name v1) n-env))])
+                 (eval-under-env f-body new-env))
+               (error "MUPL call applied to non-function")))]
+        [(apair? e)
+         (let ([v1 (eval-under-env (apair-e1 e) env)]
+               [v2 (eval-under-env (apair-e2 e) env)])
+           (apair v1 v2))]
+        [(first? e)
+         (let ([v (eval-under-env (first-e e) env)])
+           (if (apair? v)
+               (apair-e1 v)
+               (error "MUPL first applied to non-apair")))]
+        [(second? e)
+         (let ([v (eval-under-env (second-e e) env)])
+           (if (apair? v)
+               (apair-e2 v)
+               (error "MUPL first applied to non-apair")))]
+        [(munit? e) e]
+        [(ismunit? e)
+         (let ([v (eval-under-env (ismunit-e e) env)])
+           (if (munit? v) (int 1) (int 0)))]
+        [(closure? e) e]
         [#t (error (format "bad MUPL expression: ~v" e))]))
 
 ;; Do NOT change
@@ -58,20 +116,38 @@
         
 ;; Problem 3
 
-(define (ifmunit e1 e2 e3) "CHANGE")
+(define (ifmunit e1 e2 e3) (ifnz (ismunit e1) e2 e3))
 
-(define (mlet* bs e2) "CHANGE")
+(define (mlet* bs e2)
+  (if (null? bs)
+      e2
+      (mlet (car (car bs)) (cdr (car bs)) (mlet* (cdr bs) e2))))
 
-(define (ifeq e1 e2 e3 e4) "CHANGE")
+(define (ifeq e1 e2 e3 e4)
+  (mlet "_x" e1 
+        (mlet "_y" e2
+              (ifnz (isgreater (add (isgreater (var "_x") (var "_y"))
+                                    (isgreater (var "_y") (var "_x")))
+                                    (int 0))
+                         e4
+                         e3))))
 
 ;; Problem 4
 
-(define mupl-filter "CHANGE")
+(define mupl-filter
+  (fun null "pre"
+       (fun "f" "xs"
+            (ifmunit
+             (var "xs")
+             (munit)
+             (mlet "result" (call (var "f") (second (var "xs")))
+                   (ifnz (call (var "pre") (first (var "xs"))) (apair (first (var "xs")) (var "result")) (var "result")))))))
 
 (define mupl-all-gt
   (mlet "filter" mupl-filter
-        "CHANGE (notice filter is now in MUPL scope)"))
-
+        (fun null "i"
+             (call (var "filter") (fun null "j" (isgreater (var "j") (var "i")))))))
+         
 ;; Challenge Problem
 
 (struct fun-challenge (nameopt formal body freevars) #:transparent) ;; a recursive(?) 1-argument function
